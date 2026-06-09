@@ -17,7 +17,7 @@ A standalone openHAB I/O add-on that exposes a read-only REST API (`/rest/logs`)
 ## Requirements
 
 - openHAB 5.0+
-- Java 17+
+- Java 21+
 - Admin role required for all endpoints
 
 ## API Endpoints

@@ -2,7 +2,7 @@
 
 **Bundle ID:** `org.openhab.io.rest.logs`
 **Category:** I/O Extension (REST resource)
-**Target Platform:** openHAB 5.0+, Java 17+, OSGi (Apache Karaf)
+**Target Platform:** openHAB 5.0+, Java 21+, OSGi (Apache Karaf)
 
 ---
 
