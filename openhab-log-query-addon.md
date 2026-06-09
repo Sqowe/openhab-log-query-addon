@@ -16,11 +16,11 @@
 | 1. Project Scaffolding | Maven, Karaf feature, OH-INF metadata, ARCHITECTURE.md | ✅ Done |
 | 2. Core Implementation | DTOs, LogFileService, config, exception handling | ✅ Done |
 | 3. REST Endpoint | LogQueryResource with OpenAPI annotations | ✅ Done |
-| 4. Unit Tests | LogFileService tests (27 tests, all passing) | ✅ Done |
-| 5. REST Resource Tests | LogQueryResource HTTP status mapping tests | ⬜ Not started |
-| 6. Build & Deploy | Package JAR, deploy to openHAB, verify endpoints | ⬜ Not started |
-| 7. MCP Server Integration | Python client methods for openhab-mcp | ⬜ Not started |
-| 8. Future Enhancements | SSE streaming, .gz support, WebSocket tail | ⬜ Not started |
+| 4. Unit Tests | LogFileService + LogQueryResource tests (49 tests, all passing) | ✅ Done |
+| 5. REST Resource Tests | LogQueryResource HTTP status mapping tests | ✅ Done |
+| 6. Build & Deploy | Package JAR, deploy to openHAB, verify endpoints | ✅ Done |
+| 7. MCP Server Integration | Python client methods for openhab-mcp | ⬜ Separate repo |
+| 8. Future Enhancements | SSE streaming, .gz support, WebSocket tail, RE2/J | ⬜ Backlog |
 
 ### Security Hardening (applied during review iterations)
 
@@ -93,6 +93,20 @@ This addon fills the gap by exposing `/rest/logs` — a read-only REST API for s
 ---
 
 ## 3. REST API Design
+
+### Endpoint Usage Guide
+
+| Use case | Endpoint | Why |
+|----------|----------|-----|
+| "Show me recent logs" | `GET /rest/logs` | Reads backward from end of file, fast |
+| "Find errors from last night" | `GET /rest/logs/search` | Reads forward through file, time-range reliable |
+| "What log files exist?" | `GET /rest/logs/files` | Lists directory contents |
+
+**Rule of thumb:**
+- **Tail** (`/rest/logs`) — for recent activity, "what's happening now," quick glance at latest entries
+- **Search** (`/rest/logs/search`) — for historical queries, time ranges, pattern matching, "find all X between Y and Z"
+
+When using time filters (`since`/`until`) to find entries from hours or days ago, always prefer `/search` with `pattern=.` (matches everything) over `/logs` tail, because tail only scans backward from the end and may not reach far enough.
 
 ### 3.1 `GET /rest/logs` — Tail / Recent entries
 

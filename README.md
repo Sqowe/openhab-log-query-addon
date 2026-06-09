@@ -22,11 +22,13 @@ A standalone openHAB I/O add-on that exposes a read-only REST API (`/rest/logs`)
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /rest/logs` | Tail recent log entries |
-| `GET /rest/logs/search` | Search by regex pattern |
-| `GET /rest/logs/files` | List available log files |
+| Endpoint | Description | Best for |
+|----------|-------------|----------|
+| `GET /rest/logs` | Tail recent log entries | "What's happening now" |
+| `GET /rest/logs/search` | Search by regex pattern | Historical queries, time ranges |
+| `GET /rest/logs/files` | List available log files | Discovery |
+
+**Tip:** For time-range queries ("find errors from last night"), use `/rest/logs/search?pattern=.&level=ERROR&since=...&until=...` — it scans the full file. The tail endpoint only reads backward from the end.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for full technical details.
 

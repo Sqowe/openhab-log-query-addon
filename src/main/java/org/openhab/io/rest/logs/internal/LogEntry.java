@@ -18,19 +18,25 @@ import org.eclipse.jdt.annotation.Nullable;
 /**
  * Data Transfer Object representing a single parsed log entry.
  *
+ * <p>Note: openHAB uses Gson for JSON serialization which serializes fields directly.
+ * Field names must match the desired JSON property names.
+ *
  * @author openHAB Log Query Add-on contributors - Initial contribution
  */
 @NonNullByDefault
 public class LogEntry {
 
-    private static final int MAX_MESSAGE_LENGTH = 100000;
+    private static final transient int MAX_MESSAGE_LENGTH = 100000;
 
     private final String timestamp;
     private final String level;
     private final String logger;
     private final @Nullable String thread;
-    private final StringBuilder messageBuilder;
+    private String message;
     private final @Nullable Integer lineNumber;
+
+    // Transient — not serialized to JSON, used only during parsing
+    private transient int messageLength;
 
     public LogEntry(String timestamp, String level, String logger, @Nullable String thread, String message,
             @Nullable Integer lineNumber) {
@@ -38,7 +44,8 @@ public class LogEntry {
         this.level = level;
         this.logger = logger;
         this.thread = thread;
-        this.messageBuilder = new StringBuilder(message);
+        this.message = message;
+        this.messageLength = message.length();
         this.lineNumber = lineNumber;
     }
 
@@ -59,15 +66,17 @@ public class LogEntry {
     }
 
     public String getMessage() {
-        return messageBuilder.toString();
+        return message;
     }
 
     public void appendMessage(String continuation) {
-        if (messageBuilder.length() < MAX_MESSAGE_LENGTH) {
-            messageBuilder.append('\n').append(continuation);
+        if (messageLength < MAX_MESSAGE_LENGTH) {
+            this.message = this.message + "\n" + continuation;
+            this.messageLength = this.message.length();
             // Truncate if we exceed the limit
-            if (messageBuilder.length() > MAX_MESSAGE_LENGTH) {
-                messageBuilder.setLength(MAX_MESSAGE_LENGTH);
+            if (this.messageLength > MAX_MESSAGE_LENGTH) {
+                this.message = this.message.substring(0, MAX_MESSAGE_LENGTH);
+                this.messageLength = MAX_MESSAGE_LENGTH;
             }
         }
     }

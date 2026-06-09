@@ -6,7 +6,7 @@
 
     <groupId>org.openhab.addons.bundles</groupId>
     <artifactId>org.openhab.io.rest.logs</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.2-SNAPSHOT</version>
     <packaging>bundle</packaging>
 
     <name>openHAB Add-ons :: I/O :: REST Log Query</name>

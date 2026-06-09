@@ -203,6 +203,8 @@ public class LogFileService {
 
     /**
      * Returns the most recent log entries from a file (tail operation).
+     * When filters (level, logger, since, until) are specified, reads backwards through the file
+     * until enough matching entries are found or the byte budget is exhausted.
      *
      * @throws LogFileNotFoundException if the file does not exist or is not allowed
      * @throws IOException if the file cannot be read
@@ -216,10 +218,42 @@ public class LogFileService {
         int effectiveLines = Math.min(lines, config.maxLines);
         Path filePath = resolveAndValidate(fileName);
 
-        List<String> rawLines = readTail(filePath, effectiveLines);
-        List<LogEntry> entries = parseAndFilter(rawLines, level, loggerFilter, since, until, effectiveLines);
+        boolean hasFilters = (level != null && !level.isBlank())
+                || (loggerFilter != null && !loggerFilter.isBlank())
+                || (since != null && !since.isBlank())
+                || (until != null && !until.isBlank());
 
-        return LogQueryResult.forTail(fileName, entries);
+        if (!hasFilters) {
+            // No filters: just read last N lines directly
+            List<String> rawLines = readTail(filePath, effectiveLines);
+            List<LogEntry> entries = parseLogLines(rawLines, 0);
+            return LogQueryResult.forTail(fileName, entries);
+        }
+
+        // With filters: progressively scan backwards for enough matching entries.
+        // Start with a window, expand if not enough matches found.
+        int scanWindow = effectiveLines * 4; // Read more lines than needed to find matches
+        int maxScanWindow = effectiveLines * 50; // Upper bound to avoid scanning entire huge file
+        List<LogEntry> filtered = List.of();
+
+        while (scanWindow <= maxScanWindow) {
+            List<String> rawLines = readTail(filePath, scanWindow);
+            List<LogEntry> allEntries = parseLogLines(rawLines, 0);
+            filtered = applyFilters(allEntries, level, loggerFilter, since, until, effectiveLines);
+
+            if (filtered.size() >= effectiveLines || rawLines.size() < scanWindow) {
+                // Found enough, or we've read the entire file
+                break;
+            }
+            scanWindow *= 2;
+        }
+
+        // Return only the last N matching entries
+        if (filtered.size() > effectiveLines) {
+            filtered = filtered.subList(filtered.size() - effectiveLines, filtered.size());
+        }
+
+        return LogQueryResult.forTail(fileName, filtered);
     }
 
     /**
