@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config-description:config-descriptions
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:config-description="https://openhab.org/schemas/config-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/config-description/v1.0.0
+        https://openhab.org/schemas/config-description-1.0.0.xsd">
+
+    <config-description uri="io:logquery">
+        <parameter name="maxLines" type="integer">
+            <label>Maximum Lines</label>
+            <description>Maximum number of lines returned per tail request</description>
+            <default>1000</default>
+        </parameter>
+        <parameter name="maxSearchResults" type="integer">
+            <label>Maximum Search Results</label>
+            <description>Maximum entries returned by search endpoint</description>
+            <default>1000</default>
+        </parameter>
+        <parameter name="allowedFiles" type="text">
+            <label>Allowed File Patterns</label>
+            <description>Glob patterns for allowed log files (comma-separated). Prevents reading arbitrary files.</description>
+            <default>openhab.log*,events.log*</default>
+        </parameter>
+        <parameter name="regexTimeoutMs" type="integer">
+            <label>Regex Timeout (ms)</label>
+            <description>Maximum time in milliseconds for regex pattern matching per file</description>
+            <default>5000</default>
+        </parameter>
+    </config-description>
+</config-description:config-descriptions>
