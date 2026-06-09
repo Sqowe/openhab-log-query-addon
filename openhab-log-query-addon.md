@@ -1,9 +1,43 @@
 # Implementation Guide: openHAB Log Query I/O Addon
 
 **Document created:** 2026-06-09
+**Last updated:** 2026-06-09
 **Target:** Standalone openHAB addon providing REST API for log file search & analysis
 **Bundle ID:** `org.openhab.io.rest.logs`
 **Category:** I/O Extension (REST resource)
+**Status:** Core implementation complete, ready for deployment testing
+
+---
+
+## Implementation Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1. Project Scaffolding | Maven, Karaf feature, OH-INF metadata, ARCHITECTURE.md | ✅ Done |
+| 2. Core Implementation | DTOs, LogFileService, config, exception handling | ✅ Done |
+| 3. REST Endpoint | LogQueryResource with OpenAPI annotations | ✅ Done |
+| 4. Unit Tests | LogFileService tests (27 tests, all passing) | ✅ Done |
+| 5. REST Resource Tests | LogQueryResource HTTP status mapping tests | ⬜ Not started |
+| 6. Build & Deploy | Package JAR, deploy to openHAB, verify endpoints | ⬜ Not started |
+| 7. MCP Server Integration | Python client methods for openhab-mcp | ⬜ Not started |
+| 8. Future Enhancements | SSE streaming, .gz support, WebSocket tail | ⬜ Not started |
+
+### Security Hardening (applied during review iterations)
+
+| Mitigation | Status |
+|-----------|--------|
+| NOFOLLOW_LINKS file opens (TOCTOU prevention) | ✅ |
+| InterruptibleCharSequence for regex DoS | ✅ |
+| Path traversal + symlink rejection | ✅ |
+| Bounded executor with AbortPolicy | ✅ |
+| Message length cap before regex | ✅ |
+| Byte budget (50MB) for tail reads | ✅ |
+| Rotated file cap (max 10) | ✅ |
+| Volatile config for thread safety | ✅ |
+| Locale.ROOT for case comparisons | ✅ |
+| StringBuilder message accumulation | ✅ |
+| IOException propagation (404 vs 500) | ✅ |
+| Config validation with clamping | ✅ |
 
 ---
 
@@ -172,22 +206,31 @@ Searches log file content with regex pattern matching.
 
 ```
 org.openhab.io.rest.logs/
-├── pom.xml                          # Maven build (follow openhab-addons pattern)
-├── NOTICE                           # EPL-2.0 notice
+├── pom.xml                          # ✅ Maven build (standalone, openHAB 5.0 BOM, Java 21)
+├── NOTICE                           # ✅ EPL-2.0 notice
+├── .gitignore                       # ✅ Excludes target/, IDE files
+├── ARCHITECTURE.md                  # ✅ Full technical design document
+├── README.md                        # ✅ User documentation
 ├── src/main/
 │   ├── feature/
-│   │   └── feature.xml              # Karaf feature definition
+│   │   └── feature.xml              # ✅ Karaf feature definition
 │   └── java/org/openhab/io/rest/logs/internal/
-│       ├── LogQueryResource.java    # JAX-RS REST endpoint
-│       ├── LogFileService.java      # File reading & parsing logic
-│       ├── LogEntry.java            # Parsed log entry DTO
-│       ├── LogQueryConfig.java      # Configuration (ConfigAdmin)
-│       └── LogFileInfo.java         # File metadata DTO
+│       ├── LogQueryResource.java    # ✅ JAX-RS REST endpoint
+│       ├── LogFileService.java      # ✅ File reading & parsing logic (hardened)
+│       ├── LogEntry.java            # ✅ Parsed log entry DTO
+│       ├── LogFileInfo.java         # ✅ File metadata DTO
+│       ├── LogFilesResult.java      # ✅ File listing response DTO
+│       ├── LogQueryResult.java      # ✅ Query response wrapper DTO
+│       ├── LogQueryConfig.java      # ✅ Configuration (ConfigAdmin)
+│       └── LogFileNotFoundException.java  # ✅ Custom exception
 ├── src/main/resources/
 │   └── OH-INF/
+│       ├── addon/
+│       │   └── addon.xml            # ✅ Add-on metadata
 │       └── config/
-│           └── logquery.xml         # Config description for service
-└── README.md                        # User documentation
+│           └── logquery.xml         # ✅ Config description for service
+└── src/test/java/org/openhab/io/rest/logs/internal/
+    └── LogFileServiceTest.java      # ✅ 27 unit tests
 ```
 
 ---
@@ -469,151 +512,90 @@ Via openHAB Config Admin (shows up in Settings → Add-on Settings):
 
 ## 8. Build & Deployment
 
-### 8.1 Maven pom.xml skeleton
+> **Status:** ✅ Build verified — compiles and passes all tests with JDK 21.
+> BOM not available for openHAB 5.x; explicit dependency versions used instead.
 
-Follow `openhab-addons` structure (standalone addon):
+### 8.1 Prerequisites
 
-```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0">
-    <modelVersion>4.0.0</modelVersion>
+- **Java:** JDK 21+ (openHAB 5.x core is compiled with Java 21)
+- **Maven:** 3.9+
+- **JAVA_HOME** must point to JDK 21
 
-    <parent>
-        <groupId>org.openhab.addons</groupId>
-        <artifactId>org.openhab.addons.reactor.bundles</artifactId>
-        <version>5.0.0-SNAPSHOT</version>
-        <!-- Or use bom import for standalone -->
-    </parent>
+### 8.2 Build
 
-    <groupId>org.openhab.addons.bundles</groupId>
-    <artifactId>org.openhab.io.rest.logs</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-    <packaging>bundle</packaging>
-
-    <name>openHAB Add-ons :: I/O :: REST Log Query</name>
-
-    <dependencies>
-        <!-- openHAB core -->
-        <dependency>
-            <groupId>org.openhab.core.bundles</groupId>
-            <artifactId>org.openhab.core</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.openhab.core.bundles</groupId>
-            <artifactId>org.openhab.core.io.rest</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- JAX-RS / Swagger annotations -->
-        <dependency>
-            <groupId>javax.ws.rs</groupId>
-            <artifactId>javax.ws.rs-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.swagger.core.v3</groupId>
-            <artifactId>swagger-annotations</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- OSGi -->
-        <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.service.component.annotations</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.osgi</groupId>
-            <artifactId>org.osgi.service.jaxrs</artifactId>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
-</project>
+```bash
+export JAVA_HOME="/path/to/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+mvn clean package
 ```
 
-### 8.2 feature.xml
+Output: `target/org.openhab.io.rest.logs-1.0.0-SNAPSHOT.jar`
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<features name="org.openhab.io.rest.logs-${project.version}"
-    xmlns="http://karaf.apache.org/xmlns/features/v1.4.0">
-    <feature name="openhab-io-rest-logs" version="${project.version}">
-        <feature>openhab-runtime-base</feature>
-        <bundle start-level="80">mvn:org.openhab.addons.bundles/org.openhab.io.rest.logs/${project.version}</bundle>
-    </feature>
-</features>
+### 8.3 Deploy
+
+Copy the JAR to the openHAB addons directory:
+
+```bash
+cp target/org.openhab.io.rest.logs-1.0.0-SNAPSHOT.jar $OPENHAB_HOME/addons/
 ```
 
-### 8.3 Standalone deployment (without openhab-addons reactor)
+Karaf auto-deploys the bundle. No restart required.
 
-For a standalone repo, you can either:
+### 8.4 Verify
 
-1. **Use the openhab-addons BOM** for dependency management:
-```xml
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>org.openhab.core</groupId>
-            <artifactId>org.openhab.core.bom.openhab-core</artifactId>
-            <version>5.0.0</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/rest/logs/files
 ```
 
-2. **Deploy:** Copy built JAR to `$OPENHAB_HOME/addons/` — Karaf auto-deploys it.
+### 8.5 Notes
+
+- The openHAB BOM (`org.openhab.core.bom.openhab-core`) is not published for 5.x.
+  Dependency versions are pinned explicitly in pom.xml.
+- Compiles against openHAB 5.0.0 core APIs — compatible with all 5.x releases.
 
 ---
 
 ## 9. Testing
 
-### 9.1 Unit tests
+> **Status:** ✅ 27 unit tests implemented and passing
 
-```java
-class LogFileServiceTest {
+### 9.1 Unit tests (implemented)
 
-    @Test
-    void testParseLogLine() {
-        String line = "2026-06-09 12:34:56.789 [ERROR] [org.openhab.binding.zwave] - Node 5: Timeout";
-        LogEntry entry = LogFileService.parseLine(line);
-        assertEquals("ERROR", entry.level);
-        assertEquals("org.openhab.binding.zwave", entry.logger);
-        assertEquals("Node 5: Timeout", entry.message);
-    }
+`src/test/java/org/openhab/io/rest/logs/internal/LogFileServiceTest.java`
 
-    @Test
-    void testMultiLineEntry() {
-        // Stack trace continuation
-    }
+| Test | Category |
+|------|----------|
+| testParseStandardLogLine | Parsing |
+| testParseMultiLineEntry | Parsing |
+| testParseEmptyLines | Parsing |
+| testParseLevelWithTrailingSpace | Parsing |
+| testLevelFilteringWarnIncludesError | Filtering |
+| testLevelFilteringErrorOnly | Filtering |
+| testLevelFilteringUnknownLevelPassesThrough | Filtering |
+| testPathTraversalRejected | Security |
+| testPathSeparatorRejected | Security |
+| testBackslashRejected | Security |
+| testDisallowedFileRejected | Security |
+| testSymbolicLinkRejected | Security |
+| testValidFileAccepted | Security |
+| testTailReturnsLastLines | Tail |
+| testTailWithLevelFilter | Tail |
+| testTailWithLoggerFilter | Tail |
+| testTailWithTimeFilter | Tail |
+| testSearchByPattern | Search |
+| testSearchInvalidRegexRejected | Search |
+| testSearchPatternTooLongRejected | Search |
+| testTailWithUtf8Content | UTF-8 |
+| testListFiles | File listing |
+| testConfigClampsInvalidValues | Config |
+| testConfigAcceptsStringValues | Config |
+| testSearchIncludesRotatedFiles | Rotated files |
+| testSearchExcludesGzFiles | Rotated files |
+| testTimeFilterWithOffsetTimestamp | Time filtering |
 
-    @Test
-    void testLevelFiltering() {
-        // WARN filter should include WARN + ERROR, exclude INFO/DEBUG/TRACE
-    }
+Run tests: `mvn test`
 
-    @Test
-    void testTimeRangeFiltering() {
-        // since/until boundaries
-    }
+### 9.2 Integration test (manual, after deployment)
 
-    @Test
-    void testPathTraversalPrevention() {
-        assertThrows(SecurityException.class,
-            () -> logFileService.tail("../../etc/passwd", 10, null, null, null, null));
-    }
-
-    @Test
-    void testRegexTimeout() {
-        // Evil regex should be caught within timeout
-    }
-}
-```
-
-### 9.2 Integration test
-
-Test against a running openHAB instance:
 ```bash
 curl -X GET -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/rest/logs?lines=10&level=ERROR"
@@ -624,6 +606,12 @@ curl -X GET -H "Authorization: Bearer $TOKEN" \
 curl -X GET -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/rest/logs/files"
 ```
+
+### 9.3 Not yet implemented
+
+- REST resource tests (HTTP status mapping, parameter validation)
+- Regex timeout behavior with pathological patterns
+- Large file performance tests
 
 ---
 
@@ -712,9 +700,13 @@ MCP tools:
 
 | Item | Status | Notes |
 |------|--------|-------|
+| RE2/J for guaranteed linear-time regex | Recommended | Java regex is not reliably interruptible; RE2/J eliminates catastrophic backtracking |
+| REST resource unit tests | Next | Test HTTP status mapping, parameter validation |
+| Deploy & verify on openHAB 5.x | Next | Integration testing on real instance |
 | Stream large results via SSE | Future | For very large searches, consider SSE streaming |
 | Index-based search (Lucene) | Future | For production use with large logs, an index would help |
 | WebSocket live tail with filters | Future | Extend `/ws/logs` with filter params |
 | Log file download | Future | `GET /rest/logs/download?file=openhab.log` |
 | Retention / cleanup API | Future | Manage log rotation from REST |
 | Support compressed rotated logs (.gz) | Future | Read `.log.1.gz` files |
+| MCP server integration | Future | Python client methods for `openhab-mcp` |
