@@ -184,9 +184,10 @@ Config changes take a separate path: ConfigAdmin → `@Modified` → `applyConfi
 
 ## 6. Configuration & Environment Assumptions
 
-**Runtime:** openHAB 5.0+, Java 21+, Apache Karaf/OSGi. Built with Maven (`mvn clean package`), deployed
-by copying the JAR into `$OPENHAB_HOME/addons/`. **Log directory:** the `openhab.logdir` system property
-if set and non-blank, otherwise `OpenHAB.getUserDataFolder()/log` — never caller-controlled.
+**Runtime:** openHAB 5.0+ (5.1.x current), **Java 21** — required by the openHAB runtime, which does not
+yet support Java 25+. Apache Karaf/OSGi. Built with Maven (`mvn clean package`), deployed by copying the
+JAR into `$OPENHAB_HOME/addons/`. **Log directory:** the `openhab.logdir` system property if set and
+non-blank, otherwise `OpenHAB.getUserDataFolder()/log` — never caller-controlled.
 
 **Settings** (OSGi ConfigAdmin, PID `org.openhab.io.rest.logs`, UI at Settings → Add-on Settings). Each is
 clamped on ingest; the request parameters `lines` and `limit` are additionally clamped against these
@@ -201,8 +202,8 @@ ceilings:
 
 **Dependencies:** all `provided` — `org.openhab.core`, `org.openhab.core.io.rest`, `javax.ws.rs-api`,
 `javax.annotation-api`, `swagger-annotations`, the two OSGi service annotation bundles,
-`org.eclipse.jdt.annotation`, `slf4j-api`. Test-only: JUnit 5, Mockito, `jersey-common`. **Zero external
-runtime dependencies.** The openHAB 5.x BOM is not published, so versions are pinned explicitly.
+`org.eclipse.jdt.annotation`, `slf4j-api`. Test-only: JUnit 5, Mockito 5.20, `jersey-common`. **Zero
+external runtime dependencies.** The openHAB 5.x BOM is not published, so versions are pinned explicitly.
 
 **Secrets:** none in the repo — no `.env`, no credential file, no token in source or docs. All credentials
 are openHAB's (API tokens, OAuth2), held by the runtime and never seen by this bundle.
@@ -306,8 +307,9 @@ parsing, filtering, guards. The rest are DTOs and one exception.
 field declarations in `LogEntry`, `LogFileInfo`, `LogQueryResult`, `LogFilesResult`.
 
 **Gates:** `mvn test` (49 JUnit 5 tests, hermetic — `@TempDir` plus the `openhab.logdir` property) and
-`mvn clean package` for the deployable bundle. Run both on a **JDK 21** toolchain; on a newer JDK Mockito's
-inline mock maker cannot instrument `LogFileService` and the resource tests error out. There is no linter or
-formatter; match the surrounding openHAB style by hand (EPL-2.0 header, `@author` tag, `@NonNullByDefault`).
-For live verification follow [INTEGRATION-TEST.md](INTEGRATION-TEST.md); an autonomous review loop is
-available in [.agents/skills/review-fix-loop/SKILL.md](.agents/skills/review-fix-loop/SKILL.md).
+`mvn clean package` for the deployable bundle; both pass on JDK 21 and 26. **Java 21 is the target** —
+openHAB 5.x runs on a Java 21 JVM, so never raise `<release>` to match a newer local JDK. There is no
+linter or formatter; match the surrounding openHAB style by hand (EPL-2.0 header, `@author` tag,
+`@NonNullByDefault`). For live verification follow [INTEGRATION-TEST.md](INTEGRATION-TEST.md); an
+autonomous review loop is available in
+[.agents/skills/review-fix-loop/SKILL.md](.agents/skills/review-fix-loop/SKILL.md).

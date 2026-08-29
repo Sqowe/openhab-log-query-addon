@@ -49,17 +49,19 @@ abuse.
 
 ## Tooling
 
-- **Java 21**, pinned via `maven.compiler.source/target` and `<release>21</release>` in `pom.xml`. Build
-  and test on a JDK 21 toolchain — on a newer JDK (26 was tried) Mockito's inline mock maker fails to
-  instrument `LogFileService` and all 22 resource tests error out. If tests error with
-  `Could not modify all classes`, set `JAVA_HOME` to a JDK 21 rather than changing test code.
+- **Java 21** is the build and runtime target, pinned via `maven.compiler.source/target` and
+  `<release>21</release>` in `pom.xml`. openHAB 5.x requires a Java 21 JVM (Java 25+ is not yet
+  supported by the runtime), so never raise `release` to match a newer local JDK. Building on a newer
+  JDK is harmless — `release 21` cross-compiles correctly — and the test suite passes on both 21 and 26.
 - **Maven** is the build and dependency manager: `mvn clean package` produces the deployable OSGi bundle,
   `mvn test` runs the JUnit 5 suite through surefire. No wrapper script — use `mvn` directly.
 - **Target runtime:** openHAB 5.0+ on Apache Karaf/OSGi. All openHAB, JAX-RS, OSGi and SLF4J dependencies
   are `provided`; the bundle has zero external runtime dependencies.
-- **Tests:** JUnit 5 + Mockito, with `jersey-common` test-scoped so `Response.status()` resolves a
+- **Tests:** JUnit 5 + Mockito 5.20, with `jersey-common` test-scoped so `Response.status()` resolves a
   `RuntimeDelegate`. Tests are hermetic — `@TempDir` fixtures plus the `openhab.logdir` system property,
-  never a real openHAB install.
+  never a real openHAB install. Mockito must stay recent enough for its bundled Byte Buddy to instrument
+  the running JVM; if mocks start failing with `Could not modify all classes` on a newer JDK, bump
+  Mockito rather than pinning `JAVA_HOME` backwards or reworking the tests to avoid mocking.
 - **Quality gate:** `mvn test` is the only automated gate. There is no formatter, linter, or static
   analysis plugin configured — match the surrounding style by hand (openHAB conventions: EPL-2.0 header,
   `@author` tag, `@NonNullByDefault`).

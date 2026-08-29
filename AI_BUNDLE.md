@@ -8,13 +8,17 @@ for the deployment picture; this file is the coding contract. Java rules live in
 ## Maven
 
 - `pom.xml` is the single source of truth for dependencies and versions. Java release is pinned to **21**
-  (`maven.compiler.source/target` plus `<release>21</release>`); openHAB APIs to `${openhab.version}`.
+  (`maven.compiler.source/target` plus `<release>21</release>`) because the openHAB 5.x runtime is a Java 21
+  JVM — do not raise it to match a newer local JDK. openHAB APIs track `${openhab.version}`.
 - **Every openHAB, JAX-RS, OSGi, Swagger, JDT and SLF4J dependency stays `provided`.** They are supplied
   by the runtime. A `compile`-scoped dependency ends up embedded and breaks the bundle in Karaf.
 - No new runtime dependencies. The bundle must ship with zero external runtime deps — if a task seems to
   need one, stop and ask. Test-scoped additions are fine.
 - Versions are explicit, not ranges. The openHAB 5.x BOM is not published (see the comment in `pom.xml`);
   when it lands, switch to a `dependencyManagement` import rather than hand-bumping.
+- Keep Mockito current. Its bundled Byte Buddy must be able to instrument whichever JVM runs the tests; an
+  outdated Mockito fails with `Could not modify all classes` on newer JDKs. Bump Mockito in that case —
+  do not pin `JAVA_HOME` backwards or lower the build's `release` level.
 - `maven-bundle-plugin` config is deliberate: `Import-Package: *`, `Private-Package:
   org.openhab.io.rest.logs.internal.*`. Everything stays private — this bundle exports no API. Do not add
   an `Export-Package`.
