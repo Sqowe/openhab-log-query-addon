@@ -542,14 +542,14 @@ export JAVA_HOME="/path/to/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 mvn clean package
 ```
 
-Output: `target/org.openhab.io.rest.logs-1.0.0-SNAPSHOT.jar`
+Output: `target/org.openhab.io.rest.logs-1.1.0.jar`
 
 ### 8.3 Deploy
 
 Copy the JAR to the openHAB addons directory:
 
 ```bash
-cp target/org.openhab.io.rest.logs-1.0.0-SNAPSHOT.jar $OPENHAB_HOME/addons/
+cp target/org.openhab.io.rest.logs-1.1.0.jar $OPENHAB_HOME/addons/
 ```
 
 Karaf auto-deploys the bundle. No restart required.

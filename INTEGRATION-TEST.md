@@ -22,7 +22,7 @@ Check that the bundle is active in Karaf:
 bundle:list | grep "Log Query"
 
 # Expected: Active state
-# [xxx] [Active] [  80] openHAB Add-ons :: I/O :: REST Log Query (1.0.0.SNAPSHOT)
+# [xxx] [Active] [  80] openHAB Add-ons :: I/O :: REST Log Query (1.1.0)
 ```
 
 ## 2. List Log Files
