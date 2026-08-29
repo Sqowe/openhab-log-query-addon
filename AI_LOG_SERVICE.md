@@ -29,6 +29,10 @@ stop and ask rather than removing it.
 - User regexes run in the bounded `regexExecutor` (`MAX_EXECUTOR_THREADS` / `EXECUTOR_QUEUE_SIZE`) with a
   `config.regexTimeoutMs` timeout, against an `InterruptibleCharSequence` so a runaway match responds to
   interruption. Never call `matcher.find()` on a user pattern on the request thread.
+- The search pattern is compiled with `CASE_INSENSITIVE | UNICODE_CASE` unless the caller passes
+  `caseSensitive`. Both flags travel together — `CASE_INSENSITIVE` alone is ASCII-only and would silently
+  fail to fold accented item and thing labels. Case folding is not a resource-limit relaxation: the length
+  bound, the timeout and the interruptible sequence all still apply, so do not add a guard for it.
 - Patterns longer than `MAX_REGEX_LENGTH` are rejected with `IllegalArgumentException`. Messages longer
   than `MAX_MESSAGE_LENGTH_FOR_REGEX` are not matched.
 - Every scan is bounded: `MAX_TAIL_BYTES` for reverse reads, `MAX_ROTATED_FILES` for rotated-file
@@ -59,6 +63,13 @@ stop and ask rather than removing it.
   the first parsed entry are dropped, not synthesized into a fake entry.
 - Level filtering uses the `LEVEL_PRIORITY` map and is a *minimum-level* comparison, not equality.
   Logger filtering is substring. Time filtering is inclusive on both bounds.
+- All three text-matching parameters ignore case by default — `level` upper-cases, `loggerFilter`
+  lower-cases, `pattern` compiles with the case-insensitive flags. Keep them consistent: a caller (in
+  practice an LLM) that learns lowercase works for one will assume it works for all. A new filter that
+  compares text case-sensitively needs an explicit reason.
+- A search that matches nothing returns `LogQueryResult.forEmptySearch` with the `buildNoMatchHint` text,
+  which states how case was handled and names only the levers still open for that request. Keep the hint
+  free of filesystem paths and log content, like every other message leaving this class.
 - Unparseable timestamps and malformed lines are skipped or logged, never allowed to abort a whole query.
 
 ## Java and style
@@ -79,3 +90,6 @@ stop and ask rather than removing it.
   keep it hermetic, no reliance on a real openHAB install.
 - Any change to a security guard needs a test that the malicious input is rejected: traversal, symlink,
   disallowed glob, oversized pattern. Any change to parsing needs a fixture with multi-line stack traces.
+- Case handling is covered by tests for the lowercase-query default, the `caseSensitive` opt-out, an
+  accented fixture proving `UNICODE_CASE` is in effect, and an inline `(?i)` pattern that must keep
+  working. Do not drop the accented case — it is the only thing that catches a lone `CASE_INSENSITIVE`.

@@ -106,6 +106,8 @@ public class LogFileService {
     private static final int MIN_REGEX_TIMEOUT_MS = 100;
     private static final int MAX_REGEX_TIMEOUT_MS = 60000;
     private static final int MAX_MESSAGE_LENGTH_FOR_REGEX = 100000;
+    /** Below this length a pattern is already minimal, so suggesting a shorter one is unhelpful. */
+    private static final int MIN_PATTERN_LENGTH_FOR_SHORTEN_HINT = 8;
     private static final long MAX_TAIL_BYTES = 50 * 1024 * 1024; // 50 MB max scan
     private static final int MAX_ROTATED_FILES = 10;
 
@@ -257,7 +259,7 @@ public class LogFileService {
     }
 
     /**
-     * Searches log file content with a regex pattern.
+     * Searches log file content with a regex pattern, matching case-insensitively.
      *
      * @throws LogFileNotFoundException if the file does not exist or is not allowed
      * @throws IllegalArgumentException if parameters are invalid
@@ -265,6 +267,24 @@ public class LogFileService {
     public LogQueryResult search(String fileName, String pattern, @Nullable String level,
             @Nullable String loggerFilter, @Nullable String since, @Nullable String until, int limit,
             boolean includeRotated) throws LogFileNotFoundException, IOException {
+        return search(fileName, pattern, level, loggerFilter, since, until, limit, includeRotated, false);
+    }
+
+    /**
+     * Searches log file content with a regex pattern.
+     *
+     * <p>
+     * Matching is case-insensitive unless {@code caseSensitive} is {@code true}, which keeps the
+     * {@code pattern} parameter consistent with the case-insensitive {@code level} and
+     * {@code loggerFilter} parameters. Case folding is Unicode-aware, so accented log content
+     * (item labels, thing names) folds as well.
+     *
+     * @throws LogFileNotFoundException if the file does not exist or is not allowed
+     * @throws IllegalArgumentException if parameters are invalid
+     */
+    public LogQueryResult search(String fileName, String pattern, @Nullable String level,
+            @Nullable String loggerFilter, @Nullable String since, @Nullable String until, int limit,
+            boolean includeRotated, boolean caseSensitive) throws LogFileNotFoundException, IOException {
         if (limit < 1) {
             throw new IllegalArgumentException("limit must be at least 1");
         }
@@ -273,9 +293,11 @@ public class LogFileService {
                     "Pattern too long (max " + MAX_REGEX_LENGTH + " characters)");
         }
 
+        // Case folding adds no backtracking risk; the regex timeout and length bounds still apply.
+        int flags = caseSensitive ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
         Pattern compiledPattern;
         try {
-            compiledPattern = Pattern.compile(pattern);
+            compiledPattern = Pattern.compile(pattern, flags);
         } catch (PatternSyntaxException e) {
             throw new IllegalArgumentException("Invalid regex pattern: " + e.getMessage());
         }
@@ -301,7 +323,40 @@ public class LogFileService {
             allMatches.addAll(fileMatches);
         }
 
+        if (allMatches.isEmpty()) {
+            return LogQueryResult.forEmptySearch(fileName, pattern,
+                    buildNoMatchHint(pattern, caseSensitive, since, until, includeRotated));
+        }
         return LogQueryResult.forSearch(fileName, pattern, allMatches);
+    }
+
+    /**
+     * Builds a recovery hint for a search that matched nothing, so a caller (in particular an LLM
+     * driving this API) can correct the query without guessing. Mentions only the levers that are
+     * still available for the request that was made.
+     */
+    private String buildNoMatchHint(String pattern, boolean caseSensitive, @Nullable String since,
+            @Nullable String until, boolean includeRotated) {
+        StringBuilder hint = new StringBuilder("No entries matched. ");
+        if (caseSensitive) {
+            hint.append("Matching was case-sensitive (caseSensitive=true) - drop that parameter to ignore case. ");
+        } else {
+            hint.append("Matching was case-insensitive, so letter case is not the cause. ");
+        }
+        if (pattern.length() > MIN_PATTERN_LENGTH_FOR_SHORTEN_HINT) {
+            hint.append("Try a shorter substring of the message "
+                    + "(e.g. 'unifi' instead of 'UniFi Controller is OFFLINE')");
+        } else {
+            hint.append("Try a broader pattern");
+        }
+        if ((since != null && !since.isBlank()) || (until != null && !until.isBlank())) {
+            hint.append(", widen the since/until range");
+        }
+        if (!includeRotated) {
+            hint.append(", set includeRotated=true to also search rotated files");
+        }
+        hint.append(", or use pattern='.' with a level or logger filter to see what the file contains.");
+        return hint.toString();
     }
 
     /**

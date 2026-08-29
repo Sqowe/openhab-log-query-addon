@@ -271,6 +271,166 @@ class LogFileServiceTest {
                 () -> service.search("test.log", longPattern, null, null, null, null, 100, false));
     }
 
+    // --- Case-insensitive search (default) ---
+
+    /** Real-world fixture: a lowercase query must find mixed-case thing labels. */
+    @Test
+    void testSearchIsCaseInsensitiveByDefault() throws IOException, LogFileNotFoundException {
+        String content = """
+                2026-08-23 08:45:01.787 [INFO ] [org.openhab.rule.GeneralTestRule    ] - Thing with label UniFi Controller is OFFLINE
+                2026-08-23 09:45:00.401 [INFO ] [org.openhab.rule.GeneralTestRule    ] - Thing with label UniFi Site Korosbanya is UNKNOWN
+                2026-08-23 09:46:00.401 [INFO ] [org.openhab.rule.GeneralTestRule    ] - Thing with label Shelly Plug is ONLINE
+                """;
+        Files.writeString(tempDir.resolve("test.log"), content);
+
+        LogQueryResult result = service.search("test.log", "unifi", null, null, null, null, 100, false);
+        assertEquals(2, result.getTotalEntries());
+    }
+
+    @Test
+    void testSearchCaseSensitiveOptOut() throws IOException, LogFileNotFoundException {
+        String content = """
+                2026-08-23 08:45:01.787 [INFO ] [test] - Thing with label UniFi Controller is OFFLINE
+                2026-08-23 08:45:02.787 [INFO ] [test] - unifi client roamed
+                """;
+        Files.writeString(tempDir.resolve("test.log"), content);
+
+        LogQueryResult sensitive = service.search("test.log", "UniFi", null, null, null, null, 100, false, true);
+        assertEquals(1, sensitive.getTotalEntries());
+        assertEquals("Thing with label UniFi Controller is OFFLINE",
+                sensitive.getEntries().get(0).getMessage());
+
+        LogQueryResult insensitive = service.search("test.log", "UniFi", null, null, null, null, 100, false, false);
+        assertEquals(2, insensitive.getTotalEntries());
+    }
+
+    /** CASE_INSENSITIVE alone is ASCII-only; UNICODE_CASE is what folds accented labels. */
+    @Test
+    void testSearchCaseInsensitiveIsUnicodeAware() throws IOException, LogFileNotFoundException {
+        String content = """
+                2026-08-23 09:45:00.401 [INFO ] [test] - Thing with label UniFi Site Kőrösbánya is UNKNOWN
+                """;
+        Files.writeString(tempDir.resolve("test.log"), content);
+
+        LogQueryResult result = service.search("test.log", "kŐRÖSBÁNYA", null, null, null, null, 100, false);
+        assertEquals(1, result.getTotalEntries());
+    }
+
+    /** An explicit inline (?i) flag must keep working for existing callers. */
+    @Test
+    void testSearchInlineCaseInsensitiveFlagStillWorks() throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "(?i)unifi", null, null, null, null, 100, false);
+        assertEquals(1, result.getTotalEntries());
+    }
+
+    /**
+     * An inline (?-i) flag overrides the case-insensitive compile flags, giving callers per-pattern
+     * control without the caseSensitive parameter. Standard Java behaviour, pinned here on purpose.
+     */
+    @Test
+    void testSearchInlineCaseSensitiveFlagOverridesDefault() throws IOException, LogFileNotFoundException {
+        String content = """
+                2026-08-23 08:45:01.787 [INFO ] [test] - Thing with label UniFi Controller is OFFLINE
+                2026-08-23 08:45:02.787 [INFO ] [test] - unifi client roamed
+                """;
+        Files.writeString(tempDir.resolve("test.log"), content);
+
+        LogQueryResult result = service.search("test.log", "(?-i)UniFi", null, null, null, null, 100, false);
+        assertEquals(1, result.getTotalEntries());
+        assertEquals("Thing with label UniFi Controller is OFFLINE",
+                result.getEntries().get(0).getMessage());
+    }
+
+    // --- Empty-result hint ---
+
+    @Test
+    void testSearchWithNoMatchesReturnsHint() throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "zwave", null, null, null, null, 100, false);
+        assertEquals(0, result.getTotalEntries());
+        String hint = result.getHint();
+        assertNotNull(hint);
+        assertTrue(hint.contains("case-insensitive"), "hint should state how case was handled: " + hint);
+        assertTrue(hint.contains("includeRotated=true"), "hint should suggest rotated files: " + hint);
+    }
+
+    @Test
+    void testSearchWithNoMatchesHintMentionsCaseSensitiveOptOut()
+            throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "unifi", null, null, null, null, 100, false, true);
+        assertEquals(0, result.getTotalEntries());
+        String hint = result.getHint();
+        assertNotNull(hint);
+        assertTrue(hint.contains("caseSensitive=true"), "hint should name the opt-out: " + hint);
+    }
+
+    @Test
+    void testSearchWithMatchesHasNoHint() throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "unifi", null, null, null, null, 100, false);
+        assertEquals(1, result.getTotalEntries());
+        assertNull(result.getHint(), "hint must be absent when there are matches");
+    }
+
+    @Test
+    void testSearchWithNoMatchesHintMentionsTimeRangeWhenBounded()
+            throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "zwave", null, null,
+                "2026-08-23T00:00:00", "2026-08-23T23:59:59", 100, false);
+        assertEquals(0, result.getTotalEntries());
+        String hint = result.getHint();
+        assertNotNull(hint);
+        assertTrue(hint.contains("widen the since/until range"),
+                "a bounded query should be told to widen the range: " + hint);
+    }
+
+    @Test
+    void testSearchWithNoMatchesHintOmitsTimeRangeWhenUnbounded()
+            throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "zwave", null, null, null, null, 100, false);
+        assertEquals(0, result.getTotalEntries());
+        String hint = result.getHint();
+        assertNotNull(hint);
+        assertFalse(hint.contains("since/until"),
+                "an unbounded query has no range to widen: " + hint);
+    }
+
+    /** Telling a caller to shorten 'a' is nonsense; short patterns get the broader-pattern wording. */
+    @Test
+    void testSearchWithNoMatchesHintDoesNotSuggestShorteningShortPattern()
+            throws IOException, LogFileNotFoundException {
+        Files.writeString(tempDir.resolve("test.log"),
+                "2026-08-23 08:45:01.787 [INFO ] [test] - UniFi Controller is OFFLINE\n");
+
+        LogQueryResult result = service.search("test.log", "zwave", null, null, null, null, 100, false);
+        String shortHint = result.getHint();
+        assertNotNull(shortHint);
+        assertTrue(shortHint.contains("broader pattern"), "short pattern hint: " + shortHint);
+        assertFalse(shortHint.contains("shorter substring"), "short pattern hint: " + shortHint);
+
+        LogQueryResult longResult = service.search("test.log", "zwave node 5 did not respond",
+                null, null, null, null, 100, false);
+        String longHint = longResult.getHint();
+        assertNotNull(longHint);
+        assertTrue(longHint.contains("shorter substring"), "long pattern hint: " + longHint);
+    }
+
     // --- UTF-8 handling ---
 
     @Test

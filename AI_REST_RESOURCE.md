@@ -24,6 +24,9 @@ the coding contract. File reading, parsing and filtering rules live in
 - One method per endpoint, returning `Response`. `@Produces(MediaType.APPLICATION_JSON)` on every one.
 - Every query parameter is `@QueryParam`, with `@DefaultValue` for optional ones and `@Parameter` for
   the OpenAPI description. Keep the description text in sync with the real limits.
+- The `@Parameter` text is the only thing an LLM client sees before it calls. State the non-obvious
+  behaviour there — that `pattern` ignores case unless `caseSensitive=true`, that `.` matches everything —
+  rather than leaving it to the README. A default that surprises the caller belongs in the description.
 - Every method carries `@Operation` with a stable `operationId` and an `@ApiResponse` for each status
   code it can actually return. Generated clients depend on `operationId`; treat it as public API.
 - Validate cheap preconditions here (required parameters present, `lines >= 1`, `limit >= 1`) and return
@@ -50,6 +53,9 @@ the coding contract. File reading, parsing and filtering rules live in
   `transient`.
 - Nullable fields are annotated `@Nullable` under `@NonNullByDefault`; absent values stay `null` so Gson
   omits them rather than emitting a placeholder.
+- `LogQueryResult.hint` follows that rule deliberately: the service sets it only on a zero-match search
+  (via `forEmptySearch`), so a successful response is byte-identical to before. Do not populate it on a
+  result that has entries, and do not turn it into an error body — an empty result is still a `200`.
 
 ## Tests
 

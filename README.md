@@ -91,6 +91,8 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/rest/logs/files 
 
 > **Tip:** For time-range queries ("find errors from last night"), always use `/search` — it scans the full file forward. The tail endpoint reads backward from the end and may not reach far enough into history.
 
+> **Case:** `pattern` matching ignores case by default, so `pattern=unifi` finds `Thing with label UniFi Controller is OFFLINE`. Folding is Unicode-aware, so `korosbanya` will not match `Kőrösbánya` (different letters) but `kőrösbánya` will. Pass `caseSensitive=true` when case must matter, e.g. telling `ERROR` in a message apart from `Error`.
+
 ### Examples
 
 **Tail — last 10 entries:**
@@ -121,6 +123,18 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```bash
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/rest/logs/search?pattern=.&level=ERROR&since=2026-06-08T22:00:00&until=2026-06-09T06:00:00&includeRotated=true" | jq .
+```
+
+**Search — find a thing by label, any casing:**
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/rest/logs/search?pattern=unifi&since=2026-08-23T00:00:00" | jq .
+```
+
+**Search — exact casing only:**
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/rest/logs/search?pattern=UniFi&caseSensitive=true" | jq .
 ```
 
 **List available log files:**
@@ -165,13 +179,17 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `file` | string | `openhab.log` | Log file name |
-| `pattern` | string | *required* | Java regex pattern (use `.` to match all) |
+| `pattern` | string | *required* | Java regex pattern, matched case-insensitively unless `caseSensitive=true` (use `.` to match all) |
 | `level` | string | — | Minimum level filter |
 | `logger` | string | — | Logger name substring filter |
 | `since` | string | — | ISO 8601 start time |
 | `until` | string | — | ISO 8601 end time |
 | `limit` | int | `200` | Max results to return |
 | `includeRotated` | boolean | `false` | Also search rotated files (.log.1, .log.2, ...) |
+| `caseSensitive` | boolean | `false` | Match `pattern` case-sensitively |
+
+A search that matches nothing returns `totalEntries: 0` plus a `hint` field explaining how the query was
+interpreted and what to widen next. The field is absent when there are matches.
 
 ### Error Responses
 

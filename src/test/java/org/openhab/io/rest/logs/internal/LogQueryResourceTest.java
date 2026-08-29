@@ -143,10 +143,11 @@ class LogQueryResourceTest {
         LogQueryResult result = LogQueryResult.forSearch("openhab.log", "timeout", List.of(
                 new LogEntry("2026-06-09 12:00:00.000", "WARN", "test", null, "Connection timeout", 42)));
         when(logFileService.search(eq("openhab.log"), eq("timeout"), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenReturn(result);
 
-        Response response = resource.searchLogs("openhab.log", "timeout", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", "timeout", null, null, null, null, 200, false,
+                false, null);
 
         assertEquals(200, response.getStatus());
         assertNotNull(response.getEntity());
@@ -154,7 +155,7 @@ class LogQueryResourceTest {
 
     @Test
     void testSearchLogs_missingPattern_returns400() {
-        Response response = resource.searchLogs("openhab.log", null, null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", null, null, null, null, null, 200, false, false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("pattern parameter is required"));
@@ -162,7 +163,7 @@ class LogQueryResourceTest {
 
     @Test
     void testSearchLogs_blankPattern_returns400() {
-        Response response = resource.searchLogs("openhab.log", "   ", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", "   ", null, null, null, null, 200, false, false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("pattern parameter is required"));
@@ -170,7 +171,7 @@ class LogQueryResourceTest {
 
     @Test
     void testSearchLogs_invalidLimit_returns400() {
-        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, 0, false, null);
+        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, 0, false, false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("limit must be at least 1"));
@@ -178,7 +179,7 @@ class LogQueryResourceTest {
 
     @Test
     void testSearchLogs_negativeLimit_returns400() {
-        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, -1, false, null);
+        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, -1, false, false, null);
 
         assertEquals(400, response.getStatus());
     }
@@ -186,10 +187,10 @@ class LogQueryResourceTest {
     @Test
     void testSearchLogs_invalidRegex_returns400() throws Exception {
         when(logFileService.search(eq("openhab.log"), eq("[bad"), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenThrow(new IllegalArgumentException("Invalid regex pattern: Unclosed character class"));
 
-        Response response = resource.searchLogs("openhab.log", "[bad", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", "[bad", null, null, null, null, 200, false, false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("Invalid regex"));
@@ -199,10 +200,11 @@ class LogQueryResourceTest {
     void testSearchLogs_patternTooLong_returns400() throws Exception {
         String longPattern = "a".repeat(501);
         when(logFileService.search(eq("openhab.log"), eq(longPattern), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenThrow(new IllegalArgumentException("Pattern too long (max 500 characters)"));
 
-        Response response = resource.searchLogs("openhab.log", longPattern, null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", longPattern, null, null, null, null, 200, false,
+                false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("Pattern too long"));
@@ -211,10 +213,10 @@ class LogQueryResourceTest {
     @Test
     void testSearchLogs_regexTimeout_returns400() throws Exception {
         when(logFileService.search(eq("openhab.log"), eq("(a+)+$"), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenThrow(new IllegalArgumentException("Regex search timed out — pattern may be too complex"));
 
-        Response response = resource.searchLogs("openhab.log", "(a+)+$", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", "(a+)+$", null, null, null, null, 200, false, false, null);
 
         assertEquals(400, response.getStatus());
         assertTrue(response.getEntity().toString().contains("timed out"));
@@ -223,10 +225,10 @@ class LogQueryResourceTest {
     @Test
     void testSearchLogs_fileNotFound_returns404() throws Exception {
         when(logFileService.search(eq("missing.log"), eq("test"), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenThrow(new LogFileNotFoundException("Log file not found: missing.log"));
 
-        Response response = resource.searchLogs("missing.log", "test", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("missing.log", "test", null, null, null, null, 200, false, false, null);
 
         assertEquals(404, response.getStatus());
     }
@@ -234,10 +236,10 @@ class LogQueryResourceTest {
     @Test
     void testSearchLogs_ioError_returns500() throws Exception {
         when(logFileService.search(eq("openhab.log"), eq("test"), isNull(), isNull(),
-                isNull(), isNull(), eq(200), eq(false)))
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
                 .thenThrow(new IOException("Disk read error"));
 
-        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, 200, false, null);
+        Response response = resource.searchLogs("openhab.log", "test", null, null, null, null, 200, false, false, null);
 
         assertEquals(500, response.getStatus());
         assertTrue(response.getEntity().toString().contains("I/O error"));
@@ -247,13 +249,46 @@ class LogQueryResourceTest {
     void testSearchLogs_withAllFilters() throws Exception {
         LogQueryResult result = LogQueryResult.forSearch("events.log", "item.*changed", List.of());
         when(logFileService.search(eq("events.log"), eq("item.*changed"), eq("INFO"), eq("openhab"),
-                eq("2026-06-09T00:00:00"), eq("2026-06-09T23:59:59"), eq(50), eq(true)))
+                eq("2026-06-09T00:00:00"), eq("2026-06-09T23:59:59"), eq(50), eq(true), eq(false)))
                 .thenReturn(result);
 
         Response response = resource.searchLogs("events.log", "item.*changed", "INFO", "openhab",
-                "2026-06-09T00:00:00", "2026-06-09T23:59:59", 50, true, null);
+                "2026-06-09T00:00:00", "2026-06-09T23:59:59", 50, true, false, null);
 
         assertEquals(200, response.getStatus());
+    }
+
+    /** The caseSensitive query parameter must reach the service unchanged. */
+    @Test
+    void testSearchLogs_caseSensitiveParameterIsPassedThrough() throws Exception {
+        LogQueryResult result = LogQueryResult.forSearch("openhab.log", "UniFi", List.of());
+        when(logFileService.search(eq("openhab.log"), eq("UniFi"), isNull(), isNull(),
+                isNull(), isNull(), eq(200), eq(false), eq(true)))
+                .thenReturn(result);
+
+        Response response = resource.searchLogs("openhab.log", "UniFi", null, null, null, null, 200, false,
+                true, null);
+
+        assertEquals(200, response.getStatus());
+    }
+
+    /** The hint must be serialized under the field name 'hint' so callers can read it. */
+    @Test
+    void testSearchLogs_emptyResultCarriesHint() throws Exception {
+        LogQueryResult result = LogQueryResult.forEmptySearch("openhab.log", "zwave",
+                "No entries matched. Matching was case-insensitive, so letter case is not the cause.");
+        when(logFileService.search(eq("openhab.log"), eq("zwave"), isNull(), isNull(),
+                isNull(), isNull(), eq(200), eq(false), eq(false)))
+                .thenReturn(result);
+
+        Response response = resource.searchLogs("openhab.log", "zwave", null, null, null, null, 200, false,
+                false, null);
+
+        assertEquals(200, response.getStatus());
+        LogQueryResult entity = (LogQueryResult) response.getEntity();
+        assertNotNull(entity);
+        assertEquals(0, entity.getTotalEntries());
+        assertNotNull(entity.getHint());
     }
 
     // ===================================

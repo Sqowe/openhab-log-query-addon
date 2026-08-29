@@ -138,7 +138,9 @@ public class LogQueryResource implements RESTResource {
             @QueryParam("file") @DefaultValue("openhab.log")
             @Parameter(description = "Log file name") String file,
             @QueryParam("pattern")
-            @Parameter(description = "Java regex pattern (required)") @Nullable String pattern,
+            @Parameter(description = "Java regex pattern (required). Matching is case-insensitive by "
+                    + "default, so pattern=unifi matches 'UniFi Controller'. Use '.' to match all "
+                    + "messages when filtering only by level, logger or time.") @Nullable String pattern,
             @QueryParam("level")
             @Parameter(description = "Minimum log level filter") @Nullable String level,
             @QueryParam("logger")
@@ -151,6 +153,9 @@ public class LogQueryResource implements RESTResource {
             @Parameter(description = "Max results to return (max 1000)") int limit,
             @QueryParam("includeRotated") @DefaultValue("false")
             @Parameter(description = "Also search rotated log files") boolean includeRotated,
+            @QueryParam("caseSensitive") @DefaultValue("false")
+            @Parameter(description = "Match the pattern case-sensitively. Default false — letter case "
+                    + "is ignored, matching the level and logger filters.") boolean caseSensitive,
             @Context UriInfo uriInfo) {
 
         if (pattern == null || pattern.isBlank()) {
@@ -167,7 +172,7 @@ public class LogQueryResource implements RESTResource {
 
         try {
             LogQueryResult result = logFileService.search(
-                    file, pattern, level, logger, since, until, limit, includeRotated);
+                    file, pattern, level, logger, since, until, limit, includeRotated, caseSensitive);
             return Response.ok(result).build();
         } catch (LogFileNotFoundException e) {
             return Response.status(Response.Status.NOT_FOUND)

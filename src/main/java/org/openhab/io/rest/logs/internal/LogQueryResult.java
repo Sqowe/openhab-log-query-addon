@@ -29,20 +29,31 @@ public class LogQueryResult {
     private final @Nullable String pattern;
     private final int totalEntries;
     private final List<LogEntry> entries;
+    private final @Nullable String hint;
 
-    private LogQueryResult(String file, @Nullable String pattern, int totalEntries, List<LogEntry> entries) {
+    private LogQueryResult(String file, @Nullable String pattern, int totalEntries, List<LogEntry> entries,
+            @Nullable String hint) {
         this.file = file;
         this.pattern = pattern;
         this.totalEntries = totalEntries;
         this.entries = entries;
+        this.hint = hint;
     }
 
     public static LogQueryResult forTail(String file, List<LogEntry> entries) {
-        return new LogQueryResult(file, null, entries.size(), entries);
+        return new LogQueryResult(file, null, entries.size(), entries, null);
     }
 
     public static LogQueryResult forSearch(String file, String pattern, List<LogEntry> entries) {
-        return new LogQueryResult(file, pattern, entries.size(), entries);
+        return new LogQueryResult(file, pattern, entries.size(), entries, null);
+    }
+
+    /**
+     * Result of a search that matched nothing, carrying a hint on how to broaden the query.
+     * The hint is only present when there are no entries, so Gson omits the field otherwise.
+     */
+    public static LogQueryResult forEmptySearch(String file, String pattern, String hint) {
+        return new LogQueryResult(file, pattern, 0, List.of(), hint);
     }
 
     public String getFile() {
@@ -59,5 +70,9 @@ public class LogQueryResult {
 
     public List<LogEntry> getEntries() {
         return entries;
+    }
+
+    public @Nullable String getHint() {
+        return hint;
     }
 }
